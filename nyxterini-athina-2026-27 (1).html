@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Νυχτερινή Αθήνα 2026-27</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+/* Layout: χάρτης OSM πάνω, φίλτρα + πίνακας αποστάσεων κάτω, κάρτες νέων στο τέλος. Νυχτερινή παλέτα. */
+:root{
+  --bg:#10131c; --panel:#171b27; --line:#2a3042; --fg:#e8e6df; --mute:#98a0b3;
+  --accent:#f2b34a; --on:#58d38c; --soon:#7aa7ff; --warn:#ff7a7a;
+  --f-display:"Fraunces",Georgia,serif; --f-body:"Manrope",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#f5f3ee;--panel:#fff;--line:#d9d5c9;--fg:#1c2030;--mute:#5d6578;--accent:#b36b00;--on:#16794a;--soon:#2f5bd0;--warn:#b3261e}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--f-body);padding-inline:max(16px,env(safe-area-inset-left,0px));}
+header{max-width:1200px;margin:0 auto;padding-block:28px 12px}
+h1{font:600 clamp(28px,5vw,46px)/1.05 var(--f-display);margin:0 0 6px;text-wrap:balance}
+h1 em{color:var(--accent);font-style:italic}
+.sub{color:var(--mute);margin:0;max-width:70ch}
+main{max-width:1200px;margin:0 auto;padding-block:8px 48px;display:grid;gap:20px}
+#map{height:min(62vh,560px);min-height:340px;border:1px solid var(--line);border-radius:6px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:end;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px}
+.bar label{display:grid;gap:4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);min-width:0}
+input,select,button{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px 10px;min-width:0}
+button{cursor:pointer;background:var(--accent);color:#1a1405;border-color:var(--accent);font-weight:700}
+button.ghost{background:transparent;color:var(--fg);border-color:var(--line);font-weight:500}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#addr{width:min(360px,100%)}
+.grow{flex:1 1 260px}
+.msg{font-size:13px;color:var(--mute);margin:0}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:980px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--mute);cursor:pointer;white-space:nowrap;position:sticky;top:0;background:var(--panel)}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+td b{font-family:var(--f-display);font-size:17px;font-weight:600}
+.addr{color:var(--mute);font-size:13px}
+.pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;border:1px solid currentColor;white-space:nowrap}
+.pill.on{color:var(--on)}.pill.soon{color:var(--soon)}.pill.off{color:var(--mute)}
+a{color:var(--accent)}
+.links{display:flex;flex-wrap:wrap;gap:6px 10px;font-size:13px}
+h2{font:600 24px var(--f-display);margin:8px 0 0}
+.news{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.news a{display:block;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px;text-decoration:none;color:var(--fg)}
+.news a span{display:block;color:var(--mute);font-size:12px;margin-top:2px}
+.news a:hover{border-color:var(--accent)}
+.leaflet-popup-content{font:14px/1.45 var(--f-body);color:#1c2030}
+.leaflet-popup-content b{font-family:var(--f-display);font-size:16px}
+footer{max-width:1200px;margin:0 auto;padding-block:0 40px;color:var(--mute);font-size:13px}
+@media (max-width:600px){.bar{padding:10px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Νυχτερινή Αθήνα <em>2026–27</em></h1>
+  <p class="sub">Κέντρα, τραγουδιστές και ωράρια του χειμώνα σε χάρτη OpenStreetMap, με απόσταση από τη διεύθυνσή σου. Στοιχεία από δημοσιεύματα έως 18/10/2026· αν κάτι αλλάξει, το μαγαζί έχει τον τελευταίο λόγο.</p>
+</header>
+<main>
+  <section class="bar" aria-label="Διεύθυνση και φίλτρα">
+    <label class="grow">Η διεύθυνσή σου
+      <input id="addr" type="text" placeholder="π.χ. Ερμού 50, Αθήνα" autocomplete="street-address">
+    </label>
+    <button id="go" type="button">Υπολογισμός αποστάσεων</button>
+    <button id="loc" type="button" class="ghost">Η τοποθεσία μου</button>
+    <label>Ημέρα
+      <select id="day"><option value="">Όλες</option><option value="1">Δευτέρα</option><option value="2">Τρίτη</option><option value="3">Τετάρτη</option><option value="4">Πέμπτη</option><option value="5">Παρασκευή</option><option value="6">Σάββατο</option><option value="0">Κυριακή</option></select>
+    </label>
+    <label>Περιοχή
+      <select id="area"><option value="">Όλες</option></select>
+    </label>
+    <label class="grow">Αναζήτηση
+      <input id="q" type="search" placeholder="μαγαζί ή τραγουδιστής">
+    </label>
+    <p class="msg" id="msg" style="flex-basis:100%">Κάνε κλικ στον χάρτη για να ορίσεις σημείο εκκίνησης, αν δεν θες να γράψεις διεύθυνση.</p>
+  </section>
+
+  <div id="map" role="application" aria-label="Χάρτης κέντρων"></div>
+
+  <section>
+    <div class="tablewrap">
+      <table id="tbl">
+        <thead><tr>
+          <th data-k="name">Μαγαζί</th><th data-k="artists">Ποιοι τραγουδούν</th><th data-k="days">Ημέρες / ώρα</th>
+          <th data-k="start">Πρεμιέρα</th><th data-k="dist">Απόσταση</th><th>Νέα 24ώρου</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="msg" style="margin-top:8px">Η απόσταση είναι σε ευθεία γραμμή (χιλιόμετρα) από το σημείο που όρισες. Οι θέσεις των μαγαζιών είναι κατά προσέγγιση από τη διεύθυνση.</p>
+  </section>
+
+  <section>
+    <h2>Τελευταία νέα (DuckDuckGo, τελευταίες 24 ώρες)</h2>
+    <p class="msg">Κάθε σύνδεσμος ανοίγει ζωντανή αναζήτηση ειδήσεων στο DuckDuckGo με φίλτρο «Τελευταίες 24 ώρες», οπότε τα αποτελέσματα είναι πάντα τα τρέχοντα.</p>
+    <div class="news" id="news"></div>
+  </section>
+</main>
+<footer>
+  Πηγές: <a href="https://klife.gr/guide/night/52162/">KLife (18/10/2026)</a>, <a href="https://www.glentzes.gr/news/bouzoukia-cheimonas-2026-2027-ola-ta-schimata/">Glentzes</a>, <a href="https://www.in2life.gr/article/2017354/mpoyzoykia-20262027-poios-tragoydaei-poy-sthn-athhna-th-nea-sezon">in2life</a>, <a href="https://www.youweekly.gr/article/entertainment/nychterini-athina-2026-2027-ola-ta-megala-schimata-tou-cheimona-oi-synergasies-vomva-kai-oi-ekplixeis-stis-pistes">YouWeekly</a>, <a href="https://www.vradini.gr/people-style/nyxterini-athina-2026-2027-oi-kallitexnes-ta-magazia-kai-ta-sximata-tis-neas-sezon/1658320/">Βραδυνή</a>. Χάρτης © συνεργάτες του <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>. Γεωκωδικοποίηση: Nominatim.
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// d = ημέρες λειτουργίας (0=Κυρ ... 6=Σαβ), null = δεν έχει ανακοινωθεί
+const V = [
+ {n:"Ακτή Πειραιώς",a:"Πειραιώς 178 & Λαμίας 2, Ταύρος",z:"Ταύρος",c:[37.9690,23.6955],art:["Πάνος Κιάμος","Λευτέρης Πανταζής"],d:[5,6],s:["23/10/2026","2026-10-23"]},
+ {n:"Έναστρον",a:"Πειραιώς 188, Ταύρος",z:"Ταύρος",c:[37.9680,23.6935],art:["Σάκης Ρουβάς","Κατερίνα Λιόλιου"],d:[5,6],s:["30/10/2026","2026-10-30"]},
+ {n:"Άνοδος Live Stage",a:"Πειραιώς 183, Ταύρος",z:"Ταύρος",c:[37.9685,23.6945],art:["Καίτη Γαρμπή","Νικηφόρος"],d:[5,6],s:["Νοέμβριος 2026",null]},
+ {n:"Κέντρο Αθηνών",a:"Πέτρου Ράλλη 1, Ταύρος",z:"Ταύρος",c:[37.9672,23.6965],art:["Κωνσταντίνος Αργυρός","Ρία Ελληνίδου"],d:[5,6],s:["Μέσα Νοεμβρίου",null]},
+ {n:"Rox Music Hall",a:"Κρήτης 1, Ταύρος",z:"Ταύρος",c:[37.9650,23.6990],art:["Θέμης Αδαμαντίδης","Βασίλης Τερλέγκας","Αλέκος Ζαζόπουλος","Εβίτα Σερέτη"],d:[5,6],s:["Μέσα Νοεμβρίου",null]},
+ {n:"Αθηνών Αρένα",a:"Περιοχή Πειραιώς (χωρίς επιβεβαιωμένη ημερομηνία)",z:"Ταύρος",c:[37.9695,23.6965],art:["Άννα Βίσση"],d:null,s:["~20 Δεκεμβρίου (ανεπιβεβαίωτο)",null]},
+ {n:"Hotel Ermou (Hotel 130)",a:"Πειραιώς 130, Αθήνα",z:"Γκάζι / Κέντρο",c:[37.9770,23.7075],art:["Πάολα","Δήμος Αναστασιάδης"],d:[5,6],s:["23/10/2026","2026-10-23"]},
+ {n:"Βοτανικός Live",a:"Ιερά Οδός 72, Αθήνα",z:"Βοτανικός",c:[37.9835,23.7085],art:["Γιώργος Σαμπάνης","Νίκος Μακρόπουλος"],d:[5,6],s:["31/10/2026","2026-10-31"]},
+ {n:"COR Athens",a:"Ιερά Οδός (χωρίς αριθμό)",z:"Βοτανικός",c:[37.9800,23.7020],art:["Νίκος Οικονομόπουλος","Έλενα Παπαρίζου"],d:null,s:["Δεν έχει ανακοινωθεί",null]},
+ {n:"Tokyo Theater Athens",a:"Ιερά Οδός 41, Αθήνα",z:"Κεραμεικός",c:[37.9788,23.7150],art:["Ιουλία Καλλιμάνη","Josephine"],d:[5,6],s:["6/11/2026","2026-11-06"]},
+ {n:"Lohan Night Club",a:"Ιερά Οδός 30-32, Αθήνα",z:"Κεραμεικός",c:[37.9786,23.7180],art:["Ελένη Φουρέιρα"],d:[5,6],s:["15/11/2026","2026-11-15"]},
+ {n:"NOX Athens",a:"Ιερά Οδός 18, Αθήνα",z:"Κεραμεικός",c:[37.9782,23.7195],art:["Νατάσα Θεοδωρίδου","Δέσποινα Βανδή","Γιώργος Μαζωνάκης"],d:[5,6],dn:"Θεοδωρίδου–Βανδή: Παρ & Σαβ · Μαζωνάκης: Πέμ & Κυρ",s:["6/11/2026","2026-11-06"]},
+ {n:"VOX Athens",a:"Ιερά Οδός 16, Αθήνα",z:"Κεραμεικός",c:[37.9781,23.7200],art:["Χρήστος Μάστορας","Μέλισσες"],d:null,s:["Τέλη Οκτωβρίου",null]},
+ {n:"Αθηναία",a:"Ερμού 152, Αθήνα",z:"Κεραμεικός",c:[37.9777,23.7165],art:["Αντύπας","Κέλλυ Κελεκίδου"],d:[4,6],s:["5/11/2026","2026-11-05"]},
+ {n:"Voodoo Athens",a:"Κασσάνδρας 23, Αθήνα",z:"Κέντρο",c:[37.9795,23.7110],art:["Ηλίας Καμπακάκης"],d:[5,6],dn:"Club Παρ & Σαβ · τραγουδιστής τις Παρασκευές",s:["Δεν έχει ανακοινωθεί",null]},
+ {n:"Mezzo Athens Party Stage",a:"Πλ. Αγίων Ασωμάτων 1, Θησείο",z:"Θησείο",c:[37.9769,23.7225],art:["Πέγκυ Ζήνα","Χρήστος Τσιλόπουλος"],d:[3,6],s:["14/10/2026","2026-10-14"]},
+ {n:"Athens Stage",a:"Λιοσίων 325, Αθήνα",z:"Δυτικά",c:[38.0115,23.7150],art:["Στάθης Ξένος","Μάκης Χριστοδουλόπουλος","Χαρά Βέρρα"],d:[5,6],s:["24/10/2026","2026-10-24"]},
+ {n:"Bodega Live",a:"Αγίας Παρασκευής 67, Περιστέρι",z:"Δυτικά",c:[38.0150,23.6900],art:["Χρήστος Χολίδης","Νίκος Βουρλιώτης"],d:[2,5,6],s:["Ήδη ανοιχτό","2026-09-01"]},
+ {n:"Theama Athens",a:"Σίνα 7, Μαρούσι",z:"Βόρεια",c:[38.0450,23.8050],art:["Μελίνα Ασλανίδου","Χρήστος Μενιδιάτης","Παναγιώτης Μαύρος"],d:[5,6],s:["2/10/2026","2026-10-02"]},
+ {n:"Cabaret Athens",a:"Λεωφ. Κηφισίας 10-12, Μαρούσι",z:"Βόρεια",c:[38.0300,23.8050],art:["Νίκος Απέργης","Χριστίνα Μηλιού"],d:[6,0],s:["Ήδη ανοιχτό","2026-09-01"]},
+ {n:"Αυτοκίνηση Club",a:"Λεωφ. Κηφισίας 7, Μαρούσι",z:"Βόρεια",c:[38.0305,23.8040],art:["Διονύσης Σχοινάς","Γιώργος Τσαλίκης"],d:[2,5,6],s:["15/11/2026","2026-11-15"]},
+ {n:"LUX Stage Athens",a:"Λεωφ. Συγγρού 165, Αθήνα",z:"Συγγρού / Παραλιακή",c:[37.9470,23.7130],art:["Γιώργος Κακοσαίος","Ιωάννα Στρίγγα","Ηλιάννα Φωτίου"],d:[5,6],h:"Πρόγραμμα 23:45",s:["18/9/2026","2026-09-18"]},
+ {n:"VOG Club Athens",a:"Ποσειδώνος 35, Άλιμος",z:"Συγγρού / Παραλιακή",c:[37.9160,23.7090],art:["Σταμάτης Γονίδης","Λένα Ζευγαρά","Λευτέρης Κρίκης"],d:[5,6],s:["4/9/2026","2026-09-04"]},
+ {n:"Fantasia Live",a:"Ποσειδώνος 5, Ελληνικό",z:"Παραλιακή",c:[37.8990,23.7300],art:["Πέτρος Ιακωβίδης","Έλλη Κοκκίνου","Μορφούλα Ιακωβίδου"],d:[5,6],s:["11/9/2026","2026-09-11"]},
+ {n:"Posidonio Music Hall",a:"Ποσειδώνος 18, Ελληνικό",z:"Παραλιακή",c:[37.9020,23.7285],art:["Θοδωρής Φέρρης","Στέλλα Καλλή","Αφροδίτη Χατζημηνά"],d:[5,6,0],dn:"Παρ & Σαβ · Κυρ: Φέρρης–Βαρθακούρης από 25/10",s:["Σεπτέμβριος 2026","2026-09-25"]},
+ {n:"Sanremo Live",a:"Ποσειδώνος 18, Ελληνικό",z:"Παραλιακή",c:[37.9025,23.7290],art:["Θάνος Πετρέλης"],d:[5,6],s:["23/10/2026","2026-10-23"]},
+ {n:"Romeo Club",a:"Ελληνικού 1 & Ζήτα, Ελληνικό",z:"Παραλιακή",c:[37.9000,23.7320],art:["Χρήστος Σαντικάι","Εύη Κουλκουβίνη","Steve Provis"],d:null,s:["Ήδη ανοιχτό","2026-09-04"]}
+];
+const DN=["Κυρ","Δευ","Τρι","Τετ","Πεμ","Παρ","Σαβ"];
+const TODAY=new Date().toISOString().slice(0,10);
+const ddg=q=>"https://duckduckgo.com/?q="+encodeURIComponent(q)+"&df=d&ia=news";
+const osm=a=>"https://www.openstreetmap.org/search?query="+encodeURIComponent(a);
+V.forEach((v,i)=>{v.i=i;v.dist=null;
+  v.status=!v.s[1]?"off":(v.s[1]<=TODAY?"on":"soon");
+  v.dtxt=v.dn||(v.d?v.d.map(x=>DN[x]).join(" & "):"Δεν έχει ανακοινωθεί");
+  v.htxt=v.h||"από ~23:00 (συνήθως 23:00–23:45)";});
+const $=s=>document.querySelector(s);
+const areas=[...new Set(V.map(v=>v.z))].sort();
+areas.forEach(a=>$("#area").insertAdjacentHTML("beforeend",`<option>${a}</option>`));
+
+const map=L.map("map").setView([37.97,23.72],11);
+const carto=(s)=>L.tileLayer("https://{s}.basemaps.cartocdn.com/"+s+"/{z}/{x}/{y}{r}.png",{subdomains:"abcd",maxZoom:20,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>'});
+const dark=carto("dark_all"),light=carto("rastertiles/voyager");
+const osmStd=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap",referrerPolicy:"origin"});
+dark.addTo(map);
+L.control.layers({"Νυχτερινός (OSM/CARTO)":dark,"Ανοιχτός (OSM/CARTO)":light,"OpenStreetMap":osmStd}).addTo(map);
+const col={on:"#2fae6a",soon:"#4f7dff",off:"#8a90a2"};
+V.forEach(v=>{
+  v.m=L.circleMarker(v.c,{radius:9,color:"#10131c",weight:2,fillColor:col[v.status],fillOpacity:.95}).addTo(map);
+  v.m.bindPopup(()=>`<b>${v.n}</b><br>${v.a}<br><u>Τραγουδούν:</u> ${v.art.join(", ")}<br><u>Ημέρες:</u> ${v.dtxt}<br><u>Ώρα:</u> ${v.htxt}<br><u>Πρεμιέρα:</u> ${v.s[0]}`+(v.dist!=null?`<br><u>Απόσταση:</u> ${v.dist.toFixed(1)} km`:""));
+});
+let origin=null,originMarker=null;
+function setOrigin(ll,label){
+  origin=ll;
+  if(originMarker)originMarker.remove();
+  originMarker=L.marker(ll).addTo(map).bindPopup("Εδώ ξεκινάς"+(label?": "+label:"")).openPopup();
+  V.forEach(v=>v.dist=map.distance(ll,v.c)/1000);
+  sortKey="dist";asc=true;render();
+  const near=[...V].sort((a,b)=>a.dist-b.dist)[0];
+  $("#msg").textContent=`Σημείο εκκίνησης ορίστηκε. Πιο κοντά: ${near.n} (${near.dist.toFixed(1)} km).`;
+}
+map.on("click",e=>setOrigin([e.latlng.lat,e.latlng.lng],"σημείο στον χάρτη"));
+$("#go").onclick=async()=>{
+  const q=$("#addr").value.trim(); if(!q){$("#msg").textContent="Γράψε μια διεύθυνση.";return}
+  $("#msg").textContent="Αναζήτηση διεύθυνσης…";
+  try{
+    const r=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=gr&accept-language=el&q="+encodeURIComponent(q.match(/αθ|athen|πειρ|μαρου/i)?q:q+", Αθήνα"));
+    const j=await r.json();
+    if(!j.length){$("#msg").textContent="Δεν βρέθηκε η διεύθυνση. Πρόσθεσε πόλη ή κάνε κλικ στον χάρτη.";return}
+    setOrigin([+j[0].lat,+j[0].lon],j[0].display_name.split(",").slice(0,2).join(","));
+    map.setView([+j[0].lat,+j[0].lon],12);
+  }catch(e){$("#msg").textContent="Δεν έγινε σύνδεση με την υπηρεσία διευθύνσεων. Κάνε κλικ στον χάρτη."}
+};
+$("#addr").addEventListener("keydown",e=>{if(e.key==="Enter")$("#go").click()});
+$("#loc").onclick=()=>{
+  if(!navigator.geolocation){$("#msg").textContent="Ο browser δεν υποστηρίζει τοποθεσία.";return}
+  navigator.geolocation.getCurrentPosition(p=>{setOrigin([p.coords.latitude,p.coords.longitude],"η τοποθεσία μου");map.setView([p.coords.latitude,p.coords.longitude],12)},
+   ()=>$("#msg").textContent="Δεν δόθηκε άδεια τοποθεσίας.");
+};
+
+let sortKey="start",asc=true;
+document.querySelectorAll("th[data-k]").forEach(th=>th.onclick=()=>{const k=th.dataset.k;asc=sortKey===k?!asc:true;sortKey=k;render()});
+["day","area","q"].forEach(id=>$("#"+id).addEventListener("input",render));
+const val=(v,k)=>k==="name"?v.n:k==="artists"?v.art[0]:k==="days"?v.dtxt:k==="start"?(v.s[1]||"9999"):(v.dist==null?1e9:v.dist);
+function render(){
+  const day=$("#day").value,area=$("#area").value,q=$("#q").value.toLowerCase();
+  const list=V.filter(v=>(!day||!v.d||v.d.includes(+day))&&(!area||v.z===area)&&(!q||(v.n+" "+v.art.join(" ")).toLowerCase().includes(q)));
+  list.sort((a,b)=>{const x=val(a,sortKey),y=val(b,sortKey);return (x>y?1:x<y?-1:0)*(asc?1:-1)});
+  $("#tbl tbody").innerHTML=list.map(v=>`<tr>
+    <td><b>${v.n}</b><div class="addr">${v.a}</div><a href="${osm(v.n+" "+v.a)}" target="_blank" rel="noopener">OSM</a></td>
+    <td>${v.art.join(", ")}</td>
+    <td>${v.dtxt}<div class="addr">${v.htxt}</div></td>
+    <td><span class="pill ${v.status}">${v.status==="on"?"Σε λειτουργία":v.status==="soon"?"Σύντομα":"Ανοιχτό θέμα"}</span><div class="addr">${v.s[0]}</div></td>
+    <td class="num">${v.dist==null?"—":v.dist.toFixed(1)+" km"}</td>
+    <td class="links"><a href="${ddg(v.n+" "+v.art[0])}" target="_blank" rel="noopener">Μαγαζί</a>${v.art.slice(0,3).map(a=>`<a href="${ddg(a+" πίστα")}" target="_blank" rel="noopener">${a.split(" ").slice(-1)[0]}</a>`).join("")}</td>
+  </tr>`).join("");
+  V.forEach(v=>{const on=list.includes(v);if(on)v.m.addTo(map);else v.m.remove()});
+}
+const names=[...new Set(V.flatMap(v=>v.art))];
+$("#news").innerHTML=[["Μπουζούκια Αθήνα","Όλα τα νέα των πιστών"],["πρεμιέρα πίστα Αθήνα","Πρεμιέρες"],...names.slice(0,30).map(n=>[n,"Νέα για τον/την καλλιτέχνη"])]
+ .map(([q,t])=>`<a href="${ddg(q)}" target="_blank" rel="noopener">${q}<span>${t} · 24 ώρες</span></a>`).join("");
+render();
+</script>
+</body>
+</html>
